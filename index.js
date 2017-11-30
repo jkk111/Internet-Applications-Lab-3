@@ -1,11 +1,13 @@
 let http = require('http')
 let server = http.createServer();
-server.listen(1995)
+server.listen(process.env.PORT || 80);
 
 let Router = require('./Router')
 
 let r = new Router(server);
 
-r.on('message', (ws, m) => {
-  console.info('DEBUG: Message Received \'%s\' \'%s\'', ws.id, JSON.stringify(m))
-})
+require('./DirectoryService')(r)
+
+if(process.env.ENVIRONMENT === 'DEVELOPMENT') {
+  require('./Debug')(r);
+}

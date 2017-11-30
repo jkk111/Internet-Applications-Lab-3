@@ -30,18 +30,29 @@ class Router {
   // { "type": "ident", "message": "test-ident" }
   _incoming(sender, m) {
     this.__internal_on_message__(sender, m);
+
+    let callback = undefined;
+
+    if(m.callback) {
+      callback = (message) => {
+        let mesg = Buffer.from(JSON.stringify({ id: random_id(), callback_id: m.id, type: 'callback', message }))
+        sender.send(mesg);
+      }
+    }
+
     if(!m.cancelled && this.handlers[m.type]) {
+      console.log('raw', m);
       for(var handler in this.handlers[m.type]) {
         handler = this.handlers[m.type][handler]
-        handler(sender, m);
+        handler(sender, m, callback);
       }
     }
 
     if(!m.cancelled) {
       if(this.handlers['message']) {
         for(var handler in this.handlers['message']) {
-          handler = this.handlers['message'][handler]
-          handler(sender, m);
+          handler = this.handlers['message'][handler];
+          handler(sender, m, callback);
         }
       }
     }
