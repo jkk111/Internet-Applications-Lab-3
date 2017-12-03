@@ -57,3 +57,8 @@ typings/
 # dotenv environment variables file
 .env
 
+
+# Uploads and associated data
+files
+uploads
+db.sql
