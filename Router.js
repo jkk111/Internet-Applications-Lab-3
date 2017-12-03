@@ -7,10 +7,6 @@
 let ws = require('ws')
 let crypto = require('crypto')
 
-let random_id = () => {
-  return crypto.randomBytes(32).toString('base64')
-}
-
 // Router class, takes a http server, attaches a websocket listener,
 // then connects as a client to other nodes in the network
 class Router {
@@ -18,7 +14,7 @@ class Router {
     this.handlers = {};
     this.connected_nodes = {};
     this.callbacks = {};
-    this.id = random_id();
+    this.id = this.random_id();
     this.srv = new ws.Server({ server });
     let m = JSON.stringify({ type: 'ident', message: this.id });
     this.srv.on('connection', this.connection.bind(this));
@@ -26,6 +22,10 @@ class Router {
     for(var node of bootstrap) {
       this.connect(node);
     }
+  }
+
+  random_id() {
+    return crypto.randomBytes(32).toString('base64');
   }
   // { "type": "ident", "message": "test-ident" }
   _incoming(sender, m) {
@@ -35,7 +35,7 @@ class Router {
 
     if(m.callback) {
       callback = (message) => {
-        let mesg = Buffer.from(JSON.stringify({ id: random_id(), callback_id: m.id, type: 'callback', message }))
+        let mesg = Buffer.from(JSON.stringify({ id: this.random_id(), callback_id: m.id, type: 'callback', message }))
         sender.send(mesg);
       }
     }
@@ -68,7 +68,7 @@ class Router {
   }
 
   send(type, message, callback) {
-    let id = random_id();
+    let id = this.random_id();
     let m = Buffer.from(JSON.stringify({ type, id, message, callback: !!callback }));
     let clear_func = null;
     if(callback) {
@@ -120,7 +120,7 @@ class Router {
   }
 
   on(type, cb) { // Register a listener for a specific type of message.
-    let id = random_id();
+    let id = this.random_id();
     if(!this.handlers[type]) {
       this.handlers[type] = {};
     }
