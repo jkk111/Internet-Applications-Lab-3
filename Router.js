@@ -169,7 +169,7 @@ class Router {
   connect(host) {
     let conn = new ws(host);
 
-    ws.on('open', () => {
+    conn.on('open', () => {
       this.connection(socket);
     })
   }
