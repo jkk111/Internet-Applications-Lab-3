@@ -1,0 +1,27 @@
+{
+  "name": "internet-applications-lab-3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jkk111/Internet-Applications-Lab-3.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jkk111/Internet-Applications-Lab-3/issues"
+  },
+  "homepage": "https://github.com/jkk111/Internet-Applications-Lab-3#readme",
+  "dependencies": {
+    "express": "^4.16.2",
+    "multer": "^1.3.0",
+    "request": "^2.83.0",
+    "request-promise": "^4.2.2",
+    "sqlite3": "^3.1.13",
+    "ws": "^3.3.2"
+  }
+}
