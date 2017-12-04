@@ -7,12 +7,6 @@ let update_hash = db.prepare("UPDATE files SET hash = ? WHERE id = ?")
 
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS files(id TEXT, path TEXT, hash TEXT)`)
-  db.all("SELECT * FROM files", (err, rows) => {
-    console.log(rows);
-    if(rows.length === 0) {
-      db.run("INSERT INTO files(id, path, hash) VALUES(1, 'memes', '000001000001')")
-    }
-  })
 })
 
 let noop = () => {};

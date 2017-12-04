@@ -1,5 +1,9 @@
 let http = require('http')
 
+let os = require('os')
+
+let bootstrap = require(process.env.BOOTSTRAP_FILE || './bootstrap.json')
+
 let express = require('express')
 let crypto = require('crypto')
 let app = express();
@@ -15,7 +19,7 @@ server.listen(process.env.PORT || 80);
 
 let Router = require('./Router')
 
-let r = new Router(server);
+let r = new Router(server, bootstrap);
 
 app.post('/upload', upload.single('file'), (req, res) => {
   let { path } = req.body;
@@ -65,7 +69,14 @@ app.get('/by_path', (req, res, next) => {
           // However in a more expression of interest system, we could cache the result here while writing to the client.
           let url = `http://${ws.connection.remoteAddress}/by_path`;
           let proxied = request(url, { qs: { path: req.query.path } })
+          let dest = `./files/${hash}`;
+          let proxied_path = `${dest}.${r.random_id()}.tmp`;
+          proxied.pipe(fs.createWriteStream(proxied_path));
           proxied.pipe(res);
+
+          proxied.on('close', () => {
+            fs.renameSync(proxied_path, dest);
+          })
         });
       }
     } else {

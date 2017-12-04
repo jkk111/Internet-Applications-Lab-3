@@ -15,6 +15,6 @@ module.exports = (router) => {
     });
   }
 
-  router.on('add', obtain_file);
-  router.on('update', obtain_file)
+  // router.on('add', obtain_file);
+  // router.on('update', obtain_file)
 };
