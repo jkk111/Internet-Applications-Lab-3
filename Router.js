@@ -170,7 +170,7 @@ class Router {
     let conn = new ws(host);
 
     conn.on('open', () => {
-      this.connection(socket);
+      this.connection(conn);
     })
   }
 }
