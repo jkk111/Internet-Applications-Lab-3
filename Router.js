@@ -148,7 +148,8 @@ class Router {
       ws.close();
       return;
     }
-    this._incoming(ws, message);
+    if(message.sender !== this.id)
+      this._incoming(ws, message);
   }
 
   on_close(ws) {
@@ -160,6 +161,7 @@ class Router {
   }
 
   connection(socket) {
+    console.log('connection')
     let m = JSON.stringify({ type: 'ident', message: this.id })
     socket.send(Buffer.from(m));
     socket.on('message', this.on_message.bind(this, socket))

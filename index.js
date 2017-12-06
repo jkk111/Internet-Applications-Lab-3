@@ -99,8 +99,12 @@ app.get('/by_hash/:hash', (req, res, next) => {
 
 app.use('/by_hash', express.static('./files'));
 
+app.get('/ls', (req, res) => {
+  db.ls(rows => { res.send(rows) })
+});
+
 require('./DirectoryService')(db, r)
 
-if(process.env.ENVIRONMENT === 'DEVELOPMENT') {
+if(process.env.ENVIRONMENT !== 'PRODUCTION') {
   require('./Debug')(r);
 }

@@ -28,6 +28,11 @@ module.exports = () => {
     },
     update_hash: (hash, file_id, cb) => {
       update_hash.run(hash, file_id, cb || noop);
+    },
+    ls: (cb) => {
+      db.all("SELECT * FROM files", (_, rows) => {
+        cb(rows);
+      })
     }
   }
 }
