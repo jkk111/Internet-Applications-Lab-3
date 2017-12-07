@@ -37,14 +37,23 @@ app.post('/upload', upload.single('file'), (req, res) => {
       fs.renameSync(req.file.path, save_path)
       let id = r.random_id();
       db.insert(id, path, sha);
+      let m_id = r.random_id();
       let m = Buffer.from(JSON.stringify({
-        id: r.random_id(),
+        id: m_id,
         type: 'add',
         file_id: id,
         filename: path,
         hash: sha
       }));
-      r.__send_ready__(m);
+
+      let replicated = false;
+
+      let clear = r.__send_ready__(m, m_id, (ws, m, cb) => {
+        if(replicated) return;
+        replicated = true;
+        clear();
+        cb();
+      });
     }
   })
 
@@ -92,6 +101,7 @@ app.get('/by_hash/:hash', (req, res, next) => {
     console.log(req.params.hash);
     next();
   } catch(e) {
+    // TODO: Add Functionality to fetch the file and proxy to user
     console.log(e);
     next(e);
   }

@@ -34,8 +34,12 @@ class Router {
     let callback = undefined;
 
     if(m.callback) {
-      callback = (message) => {
-        let mesg = Buffer.from(JSON.stringify({ id: this.random_id(), callback_id: m.id, type: 'callback', message }))
+      callback = (message, callback) => {
+        let id = this.random_id();
+        if(callback) {
+          this.callbacks[id] = callback
+        }
+        let mesg = Buffer.from(JSON.stringify({ id, callback_id: m.id, type: 'callback', message, callback: !!callback }))
         sender.send(mesg);
       }
     }
@@ -58,13 +62,20 @@ class Router {
     }
   }
 
-  __send_ready__(buf) {
+  __send_ready__(buf, m_id, callback) {
+    let clear = () => {}
+    if(m_id && callback) {
+      this.callbacks[m_id] = callback;
+      clear = () => { delete this.callbacks[m_id] }
+    }
+
     for(var id in this.connected_nodes) {
       let client = this.connected_nodes[id]
       if(client.readyState === ws.OPEN) {
         client.send(buf)
       }
     }
+    return clear;
   }
 
   send(type, message, callback) {
@@ -111,7 +122,18 @@ class Router {
         } else if(m.type === 'callback') {
           let callback = this.callbacks[m.callback_id];
           if(callback) {
-            callback(sender, m.message);
+            callback(sender, m.message, (message, callback) => {
+              let clear = () => {};
+              if(m.callback) {
+                let id = this.random_id();
+                let mesg = Buffer.from(JSON.stringify({ id, callback_id: m.id, type: 'callback', message, callback: !!callback }))
+                if(callback) {
+                  this.callbacks[id] = callback;
+                  clear = () => { delete this.callbacks[id] };
+                }
+              }
+              return clear;
+            });
           }
         }
       }

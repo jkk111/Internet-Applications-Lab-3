@@ -1,6 +1,15 @@
 let fs = require('fs')
 let request = require('request')
 
+/*
+ Some thoughts on my replication strategy
+ Emit when a new version of a file is available,
+ first node to respond then clones the file,
+ this ensures at least 2 nodes in the network have the file,
+ for other nodes, expression of interest will be used to fetch files,
+ ie. only fetch files when a connected client is asking for it.
+ */
+
 module.exports = (router) => {
   let obtain_file = (ws, m) => {
     router.request(m.hash, async(host) => {
@@ -14,6 +23,10 @@ module.exports = (router) => {
       })
     });
   }
+
+  router.on('add', (ws, m, callback) => {
+
+  })
 
   // router.on('add', obtain_file);
   // router.on('update', obtain_file)
