@@ -25,7 +25,7 @@ class Router {
   }
 
   random_id() {
-    return crypto.randomBytes(32).toString('base64');
+    return crypto.randomBytes(32).toString('hex');
   }
   // { "type": "ident", "message": "test-ident" }
   _incoming(sender, m) {

@@ -1,10 +1,18 @@
-let request = require('request-promise');
-
+let request = require('request');
+let crypto = require('crypto')
 let nodes = require('./bootstrap.json');
 
 let tmp_dir = __dirname + '/tmp/';
 
 let fs = require('fs')
+
+let ws = require('ws')
+
+let event_socket = null;
+
+let random_id = () => {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 try {
   fs.mkdirSync(tmp_dir)
@@ -20,9 +28,12 @@ let next_node = () => {
 
 // Gets a listing of all files
 exports.ls = async() => {
-  let url = `http://${next_node()}/ls`;
-  let resp = await request(url);
-  return resp;
+  return new Promise((resolve) => {
+    let url = `http://${next_node()}/ls`;
+    request(url, { json: true }, (err, data, body) => {
+      resolve(body);
+    });
+  })
 };
 
 // Gets a file by hash, returns the file path;
@@ -36,18 +47,95 @@ exports.get = (hash) => {
     req.pipe(ws);
 
     ws.on('close', () => {
-      console.log(tmp_dir + hash);
       resolve(tmp_dir + hash);
     })
   })
 }
 
-exports.add = async() => {
+exports.get_latest = (id) => {
+  return new Promise((resolve) => {
+    let url = `http://${next_node()}/by_id/?id=${encodeURIComponent(id)}`;
+    console.log(url);
+    let ws = fs.createWriteStream(tmp_dir + id)
+    let req = request(url);
 
+    req.pipe(ws);
+
+    ws.on('close', () => {
+      resolve(tmp_dir + id);
+    })
+  })
 }
 
-exports.update = async() => {
+exports.add = async(path, value) => {
+  console.log(path, value);
+  return new Promise(async(resolve) => {
+    let url = `http://${next_node()}/upload`
+    console.log(url, path);
+    let req = request.post({
+      url,
+      method: 'POST',
+      formData: {
+        file: {
+          value,
+          options: { filename: path }
+        },
+        path: path
+      },
+      json: true
+    }, async(e, d, body) => {
+      console.log(e, d, body);
+      resolve(body);
+    })
+  })
+}
 
+exports.update = async(id, value) => {
+  console.log('update', id)
+  return new Promise(async(resolve) => {
+    console.log("promise")
+    let url = `http://${next_node()}/update`
+    let req = request({
+      url,
+      method: 'POST',
+      formData: {
+        file: {
+          value,
+          options: { filename: id }
+        },
+        id
+      }
+    })
+
+    req.on('response', async() => {
+      resolve();
+    })
+  });
+}
+
+let hello = () => {
+  let id = random_id();
+  let m = { type: 'ident', message: id }
+  return Buffer.from(JSON.stringify(m));
+}
+
+exports.on_event = (cb) => {
+  if(!event_socket) {
+    let ws_url = `ws://${next_node()}`;
+    event_socket = new ws(ws_url)
+    event_socket.on('open', () => {
+      event_socket.send(hello())
+    })
+
+
+  }
+
+  event_socket.on('message', (m) => {
+    try {
+      m = JSON.parse(m)
+      cb(m);
+    } catch(e) {}
+  });
 }
 
 module.exports = exports;

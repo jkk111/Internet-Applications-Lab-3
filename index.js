@@ -21,12 +21,9 @@ let Router = require('./Router')
 
 let r = new Router(server, bootstrap);
 
-app.post('/upload', upload.single('file'), (req, res) => {
-  let { path } = req.body;
-  console.log(path, req.file);
-
+let Hash = (path, cb) => {
   let hash = crypto.createHash('sha256');
-  let rs = fs.createReadStream(req.file.path);
+  let rs = fs.createReadStream(path);
   rs.on('readable', () => {
     let d = rs.read();
     if(d) {
@@ -34,16 +31,30 @@ app.post('/upload', upload.single('file'), (req, res) => {
     } else {
       let sha = hash.digest('hex');
       let save_path = `./files/${sha}`
-      fs.renameSync(req.file.path, save_path)
-      let id = r.random_id();
-      db.insert(id, path, sha);
+      fs.renameSync(path, save_path)
+      cb(sha);
+    }
+  });
+}
+
+app.post('/upload', upload.single('file'), (req, res) => {
+  let { path } = req.body;
+
+  console.log(req.body, req.file)
+
+  console.log(path, req.file);
+  let id = r.random_id();
+  Hash(req.file.path, (sha) => {
+    console.log('here')
+    db.insert(id, path, sha);
       let m_id = r.random_id();
       let m = Buffer.from(JSON.stringify({
         id: m_id,
         type: 'add',
         file_id: id,
         filename: path,
-        hash: sha
+        hash: sha,
+        callback: true
       }));
 
       let replicated = false;
@@ -54,9 +65,36 @@ app.post('/upload', upload.single('file'), (req, res) => {
         clear();
         cb();
       });
-    }
-  })
+    })
 
+  res.send({ id });
+})
+
+app.post('/update', upload.single('file'), (req, res) => {
+  let { id } = req.body;
+  Hash(req.file.path, (sha) => {
+    let m_id = r.random_id();
+
+    db.update(sha, id, () => {
+      let m = Buffer.from(JSON.stringify({
+        id: m_id,
+        type: 'update',
+        file_id: id,
+        hash: sha,
+        callback: true
+      }));
+
+
+      let replicated = false;
+
+      let clear = r.__send_ready__(m, m_id, (cb) => {
+        if(replicated) return;
+        replicated = true;
+        clear();
+        cb();
+      })
+    })
+  })
   res.send();
 })
 
@@ -83,8 +121,9 @@ app.get('/by_path', (req, res, next) => {
           proxied.pipe(fs.createWriteStream(proxied_path));
           proxied.pipe(res);
 
-          proxied.on('close', () => {
+          proxied.on('response', () => {
             fs.renameSync(proxied_path, dest);
+            res.download(`./files/${hash}`, name);
           })
         });
       }
@@ -95,6 +134,7 @@ app.get('/by_path', (req, res, next) => {
 })
 
 app.get('/by_hash/:hash', (req, res, next) => {
+  let { hash } = req.params.hash;
   try {
     let path = `./files/${req.params.hash}`;
     fs.accessSync(path, fs.constants.R_OK);
@@ -102,12 +142,36 @@ app.get('/by_hash/:hash', (req, res, next) => {
     next();
   } catch(e) {
     // TODO: Add Functionality to fetch the file and proxy to user
-    console.log(e);
-    next(e);
+      r.send('lookup', hash, (ws) => {
+        // So we care about the source of our responder here
+        // I assume that there is a background download, somewhere, so I won't cache the response!
+        // However in a more expression of interest system, we could cache the result here while writing to the client.
+        let url = `http://${ws.connection.remoteAddress}/by_path`;
+        let proxied = request(url, { qs: { path: req.query.path } })
+        let dest = `./files/${hash}`;
+        let proxied_path = `${dest}.${r.random_id()}.tmp`;
+        proxied.pipe(fs.createWriteStream(proxied_path));
+        proxied.pipe(res);
+
+        let name = file.path.slice(name.lastIndexOf('/') + 1);
+        proxied.on('response', () => {
+          fs.renameSync(proxied_path, dest);
+          next();
+        })
+    });
   }
 })
 
 app.use('/by_hash', express.static('./files'));
+
+app.get('/by_id', (req, res) => {
+  let { id } = req.query;
+  db.lookup_id(id, (file) => {
+    file = file.reverse()[0]
+    console.log(id, file);
+    res.redirect(`/by_hash/${file.hash}`);
+  })
+})
 
 app.get('/ls', (req, res) => {
   db.ls(rows => { res.send(rows) })

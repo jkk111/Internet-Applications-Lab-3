@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title></title>
+  <script type="text/javascript">
+    let socket = null;
+    let active_id = null;
+
+    let query_params = () => {
+      let params = {}
+      let pairs = location.search.slice(1).split('&');
+
+      for(var p of pairs) {
+        let kv = p.split('=')
+        params[kv[0]] = kv[1];
+      }
+
+      return params
+    }
+
+    let fetch_file = async() => {
+      let resp = await fetch(`/file/${active_id}`);
+
+      let data = await resp.text();
+
+      document.getElementById("editor").value = data;
+    }
+
+    addEventListener("DOMContentLoaded", () => {
+      socket = new WebSocket(`ws://${location.host}`)
+      active_id = query_params()["id"]
+      console.dir(socket);
+      socket.onmessage = (m) => {
+        console.log(m);
+        try {
+          m = JSON.parse(m.data);
+          console.log(m);
+          if(m.file_id === active_id) {
+            fetch_file();
+          }
+        } catch(e) {}
+      }
+
+      fetch_file();
+    });
+
+    let changed = (e) => {
+      console.log('changed:', e.target.value);
+      let fd = new FormData();
+      fd.append('value', e.target.value)
+      fd.append('id', active_id)
+      fetch('/update', {
+        method: 'POST',
+        body: fd
+      })
+    }
+  </script>
+</head>
+<body>
+  <textarea id="editor" oninput="changed(event)" style="width: 800px; height: 600px;">
+
+  </textarea>
+</body>
+</html>
