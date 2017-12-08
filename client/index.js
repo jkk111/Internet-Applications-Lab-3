@@ -67,11 +67,11 @@ exports.get_latest = (id) => {
   })
 }
 
-exports.add = async(path, value) => {
+exports.add = async(path, value, extra = {}) => {
   console.log(path, value);
   return new Promise(async(resolve) => {
     let url = `http://${next_node()}/upload`
-    console.log(url, path);
+    console.log(url, path, value, extra);
     let req = request.post({
       url,
       method: 'POST',
@@ -80,7 +80,8 @@ exports.add = async(path, value) => {
           value,
           options: { filename: path }
         },
-        path: path
+        path: path,
+        extra: JSON.stringify(extra)
       },
       json: true
     }, async(e, d, body) => {
@@ -90,11 +91,14 @@ exports.add = async(path, value) => {
   })
 }
 
-exports.update = async(id, value) => {
+exports.update = async(id, value, extra = {}) => {
   console.log('update', id)
   return new Promise(async(resolve) => {
     console.log("promise")
     let url = `http://${next_node()}/update`
+
+    console.log(extra)
+
     let req = request({
       url,
       method: 'POST',
@@ -103,7 +107,8 @@ exports.update = async(id, value) => {
           value,
           options: { filename: id }
         },
-        id
+        id,
+        extra: JSON.stringify(extra)
       }
     })
 
@@ -123,6 +128,7 @@ exports.on_event = (cb) => {
   if(!event_socket) {
     let ws_url = `ws://${next_node()}`;
     event_socket = new ws(ws_url)
+    console.log(event_socket)
     event_socket.on('open', () => {
       event_socket.send(hello())
     })

@@ -21,6 +21,8 @@ let Router = require('./Router')
 
 let r = new Router(server, bootstrap);
 
+let lock = require('./lock')(r);
+
 let Hash = (path, cb) => {
   let hash = crypto.createHash('sha256');
   let rs = fs.createReadStream(path);
@@ -31,67 +33,84 @@ let Hash = (path, cb) => {
     } else {
       let sha = hash.digest('hex');
       let save_path = `./files/${sha}`
-      fs.renameSync(path, save_path)
-      cb(sha);
+      lock(save_path, (release) => {
+        fs.renameSync(path, save_path)
+        release();
+        cb(sha);
+      })
     }
   });
 }
 
 app.post('/upload', upload.single('file'), (req, res) => {
-  let { path } = req.body;
+  let { path, extra } = req.body;
+  try {
+    extra = JSON.parse(extra);
+  } catch(e) { extra = {} }
 
   console.log(req.body, req.file)
 
   console.log(path, req.file);
   let id = r.random_id();
-  Hash(req.file.path, (sha) => {
-    console.log('here')
-    db.insert(id, path, sha);
-      let m_id = r.random_id();
-      let m = Buffer.from(JSON.stringify({
-        id: m_id,
-        type: 'add',
-        file_id: id,
-        filename: path,
-        hash: sha,
-        callback: true
-      }));
+  lock(id, (release) => {
+    Hash(req.file.path, (sha) => {
+      console.log('here')
+      db.insert(id, path, sha);
+        let m_id = r.random_id();
+        let m = Buffer.from(JSON.stringify({
+          id: m_id,
+          type: 'add',
+          file_id: id,
+          filename: path,
+          hash: sha,
+          callback: true,
+          ...extra
+        }));
 
-      let replicated = false;
+        let replicated = false;
 
-      let clear = r.__send_ready__(m, m_id, (ws, m, cb) => {
-        if(replicated) return;
-        replicated = true;
-        clear();
-        cb();
-      });
-    })
+        release();
+        let clear = r.__send_ready__(m, m_id, (ws, m, cb) => {
+          if(replicated) return;
+          replicated = true;
+          clear();
+          cb();
+        });
+      })
+  })
 
   res.send({ id });
 })
 
 app.post('/update', upload.single('file'), (req, res) => {
-  let { id } = req.body;
-  Hash(req.file.path, (sha) => {
-    let m_id = r.random_id();
+  let { id, extra } = req.body;
+  try {
+    extra = JSON.parse(extra);
+  } catch(e) { extra = {} }
 
-    db.update(sha, id, () => {
-      let m = Buffer.from(JSON.stringify({
-        id: m_id,
-        type: 'update',
-        file_id: id,
-        hash: sha,
-        callback: true
-      }));
+  lock(id, (release) => {
+    Hash(req.file.path, (sha) => {
+      let m_id = r.random_id();
+
+      db.update(sha, id, () => {
+        let m = Buffer.from(JSON.stringify({
+          id: m_id,
+          type: 'update',
+          file_id: id,
+          hash: sha,
+          callback: true,
+          ...extra
+        }));
 
 
-      let replicated = false;
-
-      let clear = r.__send_ready__(m, m_id, (cb) => {
-        if(replicated) return;
-        replicated = true;
-        clear();
-        cb();
+        let replicated = false;
+        release();
+        let clear = r.__send_ready__(m, m_id, (cb) => {
+          if(replicated) return;
+          replicated = true;
+          clear();
+          cb();
+        })
       })
     })
   })
@@ -106,26 +125,34 @@ app.get('/by_path', (req, res, next) => {
 
       name = name.slice(name.lastIndexOf('/') + 1);
       try {
-        fs.accessSync(`./files/${hash}`, fs.constants.R_OK);
-        res.download(`./files/${hash}`, name);
+        lock(hash, (release) => {
+          fs.accessSync(`./files/${hash}`, fs.constants.R_OK);
+          res.download(`./files/${hash}`, name, () => {
+            release();
+          });
+        })
       } catch(e) {
         // Right So this is going to require proxying from a server that can satisfy the request
         r.send('lookup', hash, (ws) => {
           // So we care about the source of our responder here
           // I assume that there is a background download, somewhere, so I won't cache the response!
           // However in a more expression of interest system, we could cache the result here while writing to the client.
-          let url = `http://${ws.connection.remoteAddress}/by_path`;
-          let proxied = request(url, { qs: { path: req.query.path } })
-          let dest = `./files/${hash}`;
-          let proxied_path = `${dest}.${r.random_id()}.tmp`;
-          proxied.pipe(fs.createWriteStream(proxied_path));
-          proxied.pipe(res);
+            let url = `http://${ws.connection.remoteAddress}/by_path`;
+            let proxied = request(url, { qs: { path: req.query.path } })
+            let dest = `./files/${hash}`;
+            let proxied_path = `${dest}.${r.random_id()}.tmp`;
+            proxied.pipe(fs.createWriteStream(proxied_path));
+            proxied.pipe(res);
 
-          proxied.on('response', () => {
-            fs.renameSync(proxied_path, dest);
-            res.download(`./files/${hash}`, name);
-          })
-        });
+            proxied.on('close', () => {
+              lock(hash, (release) => {
+                fs.renameSync(proxied_path, dest);
+                res.download(`./files/${hash}`, name, () => {
+                  release()
+                });
+              })
+            })
+          });
       }
     } else {
       next();
@@ -149,14 +176,16 @@ app.get('/by_hash/:hash', (req, res, next) => {
         let url = `http://${ws.connection.remoteAddress}/by_path`;
         let proxied = request(url, { qs: { path: req.query.path } })
         let dest = `./files/${hash}`;
-        let proxied_path = `${dest}.${r.random_id()}.tmp`;
-        proxied.pipe(fs.createWriteStream(proxied_path));
-        proxied.pipe(res);
+        lock(dest, () => {
+          let proxied_path = `${dest}.${r.random_id()}.tmp`;
+          proxied.pipe(fs.createWriteStream(proxied_path));
+          proxied.pipe(res);
 
-        let name = file.path.slice(name.lastIndexOf('/') + 1);
-        proxied.on('response', () => {
-          fs.renameSync(proxied_path, dest);
-          next();
+          let name = file.path.slice(name.lastIndexOf('/') + 1);
+          proxied.on('close', () => {
+            fs.renameSync(proxied_path, dest);
+            next();
+          })
         })
     });
   }

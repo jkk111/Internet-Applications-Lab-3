@@ -3,6 +3,7 @@
 <head>
   <title></title>
   <script type="text/javascript">
+    let uid = Math.floor(Math.random() * 1000000);
     let socket = null;
     let active_id = null;
 
@@ -35,7 +36,7 @@
         try {
           m = JSON.parse(m.data);
           console.log(m);
-          if(m.file_id === active_id) {
+          if(m.file_id === active_id && m.uid != uid) {
             fetch_file();
           }
         } catch(e) {}
@@ -49,6 +50,7 @@
       let fd = new FormData();
       fd.append('value', e.target.value)
       fd.append('id', active_id)
+      fd.append('uid', uid)
       fetch('/update', {
         method: 'POST',
         body: fd

@@ -30,7 +30,8 @@ app.post('/update', upload.single(), async(req, res) => {
   console.log(req.body);
   let id = req.body.id;
   let value = req.body.value;
-  await client.update(id, value);
+  let uid = req.body.uid;
+  await client.update(id, value, { uid });
   res.send();
 })
 

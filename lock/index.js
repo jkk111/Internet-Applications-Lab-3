@@ -1,4 +1,4 @@
-// Inter-node comms handled via websockets for convienience.
+/*// Inter-node comms handled via websockets for convienience.
 let io = require("socket.io");
 let client = require("socket.io-client");
 
@@ -6,7 +6,7 @@ let nodes = [];
 let locks = {};
 
 let random_id = () => {
-	return crypto.randomBytes(16).toString('base64');
+	return crypto.randomBytes(16).toString('hex');
 }
 
 let forward = (sender, message) => {
@@ -159,3 +159,79 @@ let initialize_lock_service = (node_list, http_server) => {
 // No need to complplicate the exports,
 // We only need to be able to obtain a lock.
 module.exports = initialize_lock_service;
+*/
+
+let router = null;
+
+let lock_message = (id) => {
+	let m = { id: router.random_id(), type: 'lock', lock_id: id };
+}
+
+let unlock_message = (id) => {
+	let m = { id: router.random_id(), type: 'unlock', lock_id: id };
+}
+
+let pending = {};
+let locks = {};
+let lock_items = {};
+
+let _lock = id => {
+	locks[id] = true;
+
+	let timeout = null
+	let released = false;
+	let release = (notify = true) => {
+		if(released) return;
+		released = true;
+		clearTimeout(timeout)
+		unlock_message(id);
+		if(pending[id] && pending[id].length) {
+			let next = pending[id].shift();
+			next(_lock(id));
+		} else {
+			locks[id] = false;
+		}
+	}
+
+	lock_items[id] = release;
+
+	setTimeout(release, 30000);
+	return release;
+}
+
+let _unlock = (id) => {
+	lock_items[id](false); // release the lock
+}
+
+let _queue = (id, cb) => {
+	if(!pending[id])
+		pending[id] = [ cb ];
+	else
+		pending[id].push(cb);
+}
+
+let lock = (id, cb, emit = true) => {
+	if(!locks[id]) {
+		cb(_lock(id));
+	} else {
+		_queue(id, cb);
+	}
+	if(emit) {
+		router.send(lock_message());
+	}
+}
+
+module.exports = (r) => {
+	r.on('lock', (m) => {
+		let id = m.lock_id
+		lock(id, () => {}, false);
+	})
+
+	r.on('unlock', (m) => {
+		let id = m.lock_id
+		_unlock(id);
+	})
+
+	router = r;
+	return lock;
+};
